@@ -68,12 +68,15 @@ static func tile(ci: CanvasItem, r: Rect2, kind: int, cell: Vector2i, t: float) 
 				var off := sin(t * 2.5 + cell.x * 1.3 + k) * s * 0.08
 				ci.draw_line(Vector2(r.position.x + s * 0.15 + off, y), Vector2(r.position.x + s * 0.55 + off, y), WATER_LIGHT, s * 0.05)
 		Rules.ICE:
-			_snow(ci, r, cell)
-			var inner := r.grow(-s * 0.04)
-			ci.draw_rect(inner, ICE)
-			ci.draw_rect(inner, ICE_EDGE, false, s * 0.04)
-			ci.draw_line(inner.position + Vector2(s * 0.2, s * 0.7), inner.position + Vector2(s * 0.5, s * 0.2), Color(1, 1, 1, 0.8), s * 0.05)
-			ci.draw_line(inner.position + Vector2(s * 0.45, s * 0.75), inner.position + Vector2(s * 0.65, s * 0.4), Color(1, 1, 1, 0.6), s * 0.035)
+			# Frozen water: a flat, frosty pond surface you can walk on.
+			# Deliberately flat (no border, no depth) so it never looks like a block.
+			ci.draw_rect(r, Color("bfe6f5"))
+			ci.draw_rect(Rect2(r.position + Vector2(0, s * 0.9), Vector2(s, s * 0.1)), Color("a6d8ec"))
+			var crack := Color(1, 1, 1, 0.75)
+			ci.draw_polyline(PackedVector2Array([r.position + Vector2(s * 0.12, s * 0.3), r.position + Vector2(s * 0.38, s * 0.42),
+					r.position + Vector2(s * 0.5, s * 0.66), r.position + Vector2(s * 0.8, s * 0.74)]), crack, s * 0.025)
+			ci.draw_line(r.position + Vector2(s * 0.38, s * 0.42), r.position + Vector2(s * 0.6, s * 0.22), crack, s * 0.02)
+			snowflake(ci, r.position + Vector2(s * 0.75, s * 0.32), s * 0.08, Color(1, 1, 1, 0.5), 0.0)
 		_:
 			_snow(ci, r, cell)
 	match kind:
@@ -100,13 +103,19 @@ static func _snow(ci: CanvasItem, r: Rect2, cell: Vector2i) -> void:
 		ci.draw_circle(p, s * 0.025, Color("c9c2f0"))
 
 
+## An ice block: a chunky raised cube with a shadow, a bright top face and a
+## darker front face, so it clearly reads as an object you can push or melt.
 static func block(ci: CanvasItem, r: Rect2) -> void:
 	var s := r.size.x
-	var b := r.grow(-s * 0.08)
-	ci.draw_rect(b, Color(0.75, 0.94, 1.0, 0.95))
-	ci.draw_rect(Rect2(b.position, Vector2(b.size.x, b.size.y * 0.25)), Color(0.9, 0.98, 1.0))
-	ci.draw_rect(b, ICE_EDGE.darkened(0.15), false, s * 0.05)
-	ci.draw_line(b.position + Vector2(s * 0.15, s * 0.65), b.position + Vector2(s * 0.4, s * 0.35), Color.WHITE, s * 0.05)
+	ci.draw_rect(Rect2(r.position + Vector2(s * 0.12, s * 0.8), Vector2(s * 0.8, s * 0.14)), Color(0.2, 0.15, 0.4, 0.2))  # shadow
+	var top := Rect2(r.position + Vector2(s * 0.1, s * 0.02), Vector2(s * 0.8, s * 0.56))
+	var front := Rect2(r.position + Vector2(s * 0.1, s * 0.58), Vector2(s * 0.8, s * 0.28))
+	ci.draw_rect(front, Color("5fb3d6"))
+	ci.draw_rect(top, Color("d8f6ff"))
+	ci.draw_rect(Rect2(top.position, top.size + Vector2(0, front.size.y)), Color("3d8fb5"), false, s * 0.05)
+	ci.draw_line(front.position, front.position + Vector2(front.size.x, 0), Color("3d8fb5"), s * 0.04)
+	ci.draw_line(top.position + Vector2(s * 0.12, s * 0.42), top.position + Vector2(s * 0.34, s * 0.12), Color.WHITE, s * 0.06)
+	ci.draw_line(top.position + Vector2(s * 0.3, s * 0.46), top.position + Vector2(s * 0.44, s * 0.28), Color(1, 1, 1, 0.7), s * 0.04)
 
 
 static func lantern(ci: CanvasItem, c: Vector2, s: float, lit: bool, t: float) -> void:
