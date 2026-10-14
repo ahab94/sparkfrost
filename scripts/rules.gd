@@ -13,8 +13,10 @@ extends RefCounted
 ##   f  Frost's exit  s  Spark's exit     B  ice block on snow
 ##   F  Frost starts here (on snow)       S  Spark starts here (on snow)
 ##
-## Moving onto ice slides you until you reach a tile that isn't ice or hit
-## something. Pushing a block into water fills it with ice: a bridge.
+## Ice is solid ground: frozen water becomes a bridge you can walk on.
+## Pushing a block into water fills it with ice: another kind of bridge.
+## (An early version made ice slippery; players found sliding plus "water
+## stops you" confusing, so ice is now simply ground.)
 
 const WALL := 35       # '#'
 const FLOOR := 46      # '.'
@@ -100,8 +102,9 @@ func lanterns_left() -> int:
 
 # --- Moving ------------------------------------------------------------------
 
-## Moves sister `si` one step in `d` (sliding on ice). Returns the tiles she
-## passed through, or an empty array if she couldn't move.
+## Moves sister `si` one step in `d`, pushing a block if one is in the way.
+## Returns the tiles she passed through (one), or an empty array if she
+## couldn't move.
 func move(si: int, d: Vector2i) -> Array[Vector2i]:
 	facing[si] = d
 	var path: Array[Vector2i] = []
@@ -110,15 +113,8 @@ func move(si: int, d: Vector2i) -> Array[Vector2i]:
 		return path
 	if not _can_stand(si, n):
 		return path
-	var p := n
-	path.append(p)
-	while tile(p) == ICE:
-		var nx := p + d
-		if has_block(nx) or not _can_stand(si, nx):
-			break
-		p = nx
-		path.append(p)
-	pos[si] = p
+	path.append(n)
+	pos[si] = n
 	return path
 
 
@@ -129,29 +125,22 @@ func _can_stand(si: int, c: Vector2i) -> bool:
 	return t == FLOOR or t == ICE or t == EXIT_FROST or t == EXIT_SPARK or t == OPEN_DOOR
 
 
-## A block at `c` pushed toward `d`. It slides across ice, and drops into
-## water to become an ice bridge. Returns whether it moved.
+## A block at `c` pushed toward `d` moves one tile. Pushed into water, it
+## sinks and freezes the water into an ice bridge. Returns whether it moved.
 func _push_block(c: Vector2i, d: Vector2i) -> bool:
-	var at := c
-	var moved := false
-	while true:
-		var nx := at + d
-		var t := tile(nx)
-		if t == WATER:
-			_set_block(at, false)
-			terrain[nx.y * w + nx.x] = ICE
-			return true
-		var free := (t == FLOOR or t == ICE or t == OPEN_DOOR) and not has_block(nx) \
-				and nx != pos[0] and nx != pos[1]
-		if not free:
-			break
-		_set_block(at, false)
-		_set_block(nx, true)
-		at = nx
-		moved = true
-		if t != ICE:
-			break  # blocks stop sliding once they reach snow
-	return moved
+	var nx := c + d
+	var t := tile(nx)
+	if t == WATER:
+		_set_block(c, false)
+		terrain[nx.y * w + nx.x] = ICE
+		return true
+	var free := (t == FLOOR or t == ICE or t == OPEN_DOOR) and not has_block(nx) \
+			and nx != pos[0] and nx != pos[1]
+	if not free:
+		return false
+	_set_block(c, false)
+	_set_block(nx, true)
+	return true
 
 
 func _set_block(c: Vector2i, on: bool) -> void:

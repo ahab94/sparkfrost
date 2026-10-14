@@ -37,9 +37,6 @@ def sfx():
     s = {}
     # Soft snow crunch for each step: low, short and dark (it repeats a lot).
     s["step"] = noise(0.09, 0.4, decay=0.025, lowpass=650, highpass=90, seed=3, attack=0.01)
-    # Sliding on ice: an airy rising whoosh with a thin shimmer.
-    s["slide"] = layer(noise(0.45, 0.35, decay=None, lowpass=500, sweep_to=2600, highpass=200, seed=4, attack=0.05),
-                       tone(1000, 0.45, "sine", 0.05, glide_to=1500, attack=0.05, release=0.2))
     # "Nope": a gentle two-note boop down.
     s["nope"] = layer(tone(hz("E4"), 0.09, "tri", 0.35, decay=0.06),
                       at(0.08, tone(hz("C4"), 0.14, "tri", 0.35, decay=0.08)))

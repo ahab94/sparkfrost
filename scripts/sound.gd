@@ -6,7 +6,7 @@ extends Node
 ## a "Music" bus, so each group's volume is set in one place.
 
 const SFX := {
-	"step": preload("res://audio/sfx/step.wav"), "slide": preload("res://audio/sfx/slide.wav"),
+	"step": preload("res://audio/sfx/step.wav"),
 	"nope": preload("res://audio/sfx/nope.wav"), "freeze": preload("res://audio/sfx/freeze.wav"),
 	"melt": preload("res://audio/sfx/melt.wav"), "push": preload("res://audio/sfx/push.wav"),
 	"bridge": preload("res://audio/sfx/bridge.wav"), "light": preload("res://audio/sfx/light.wav"),

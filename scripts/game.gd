@@ -19,7 +19,6 @@ const Sound := preload("res://scripts/sound.gd")
 
 const SAVE_PATH := "user://sparkfrost.cfg"
 const STEP_TIME := 0.15      # seconds per tile walked
-const SLIDE_TIME := 0.075    # seconds per tile slid on ice
 const BUFFER_TIME := 0.3     # how long an early key press is remembered
 const NAMES := ["Frost", "Spark"]
 const KEYS := ["WASD + Space", "Arrows + Enter"]
@@ -209,10 +208,7 @@ func do_action(a: int, pressed := true) -> void:
 				pushed = true
 		if pushed:
 			sound.play("push", -3.0, 0.05)
-		if path.size() > 1 or board.tile(path[0]) == Rules.ICE:
-			sound.play("slide", -6.0, 0.08)
-			_set_mood(si, "surprised", 0.3 + path.size() * SLIDE_TIME)
-			_set_emote(si, "!", 0.6)
+			_set_mood(si, "proud", 0.5)
 	_record_fx(before)
 	active = si
 	history.append([before, moves, active])
@@ -359,28 +355,23 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
-## Walks a sister through her queued tiles: an eased hop for each step on
-## snow, a fast smooth glide on ice, and a little squash when she lands.
+## Walks a sister through her queued tiles: an eased hop for each step and a
+## little squash when she lands.
 func _animate(si: int, delta: float) -> void:
 	if _seg[si].is_empty():
 		if _paths[si].is_empty():
 			return
 		var next: Vector2i = _paths[si].pop_front()
-		var sliding: bool = board.tile(next) == Rules.ICE or not _paths[si].is_empty()
-		_seg[si] = {"from": _vis[si], "to": Vector2(next), "u": 0.0, "slide": sliding,
-				"dur": SLIDE_TIME if sliding else STEP_TIME}
-		if not sliding:
-			sound.play("step", -20.0, 0.15)
+		_seg[si] = {"from": _vis[si], "to": Vector2(next), "u": 0.0, "slide": false, "dur": STEP_TIME}
+		sound.play("step", -20.0, 0.15)
 	var seg: Dictionary = _seg[si]
 	seg.u = minf(seg.u + delta / seg.dur, 1.0)
 	var e: float = seg.u if seg.slide else seg.u * seg.u * (3.0 - 2.0 * seg.u)   # smoothstep for steps
 	_vis[si] = (seg.from as Vector2).lerp(seg.to, e)
-	if seg.slide and fmod(seg.u, 0.5) < delta / seg.dur:
-		_burst(Vector2i((seg.to as Vector2).round()), "skid")
 	if seg.u >= 1.0:
 		_seg[si] = {}
 		if _paths[si].is_empty():
-			_squash[si] = 0.18 if not seg.slide else 0.1
+			_squash[si] = 0.18
 
 
 func _hop(si: int) -> float:

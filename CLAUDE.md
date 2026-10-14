@@ -16,7 +16,7 @@ A cozy two-sister puzzle game in Godot 4.7 (GDScript). Frost freezes water into 
 - Visual check: `godot --path . -- --level=N --screenshot=<scratchpad>/x.png`, then Read the PNG.
 
 ## Layout
-- `scripts/rules.gd`: all puzzle rules, with no graphics. It has terrain + blocks layers, `move` (with ice sliding and block pushing), `power`, `won`, `key`/`copy` for the solver, and int-encoded actions. The map format is at the top.
+- `scripts/rules.gd`: all puzzle rules, with no graphics. It has terrain + blocks layers, `move` (one step, pushing a block if needed), `power`, `won`, `key`/`copy` for the solver, and int-encoded actions. The map format is at the top.
 - `scripts/solver.gd`: BFS over board states. It gives the shortest solution, proves levels beatable, and sets par.
 - `scripts/levels.gd`: levels as ASCII maps with name, hint and par. When you change a map, run verify; the test reports the new minimum to use as par.
 - `scripts/game.gd`: input, animation, particles, HUD, undo, stars, saves (`user://sparkfrost.cfg`), emotions and story. Frost is always WASD + Space and Spark is always Arrows + Enter (no switching). Input is polled each frame: hold to keep walking, presses mid-step are buffered, and smart power aims at the one valid neighbour. Changed tiles animate via `_tile_fx`. Moods (happy, joy, proud, surprised, worried, sad) and emotes (heart, !, ?, sparkle, sweat) react to events; Spark is worried next to water. Each level's intro/outro story lines come from levels.gd. It draws from board state every frame and refits to any window shape (the stretch aspect is "expand").
@@ -25,6 +25,8 @@ A cozy two-sister puzzle game in Godot 4.7 (GDScript). Frost freezes water into 
 
 ## Conventions
 - Rules stay deterministic and graphics-free, so the solver and the game always agree.
+- Ice is plain ground, with no sliding. The user found "ice slides and water stops you" confusing, so sliding was removed. Don't bring it back without asking. Blocks move one tile per push.
 - Frost can't create ice blocks (that rule exploded the solver's state space and was hard for kids). Blocks come only from maps.
+- Keep levels compact: big open rooms make the puzzles slack and make the solver slow (verify takes ~70s at 15 levels).
 - Scripts use `preload`, not `class_name`. Declare explicit types on values from untyped objects (`var p: Vector2 = obj.thing`), or GDScript fails to parse.
 - Comments explain why. The user is learning Godot, so briefly explain new engine concepts.
