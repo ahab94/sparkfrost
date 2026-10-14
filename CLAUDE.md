@@ -9,16 +9,19 @@ A cozy two-sister puzzle game in Godot 4.7 (GDScript). Frost freezes water into 
 
 ## Run and check
 - Play: `godot --path .`
-- Every change: `bash checks/verify.sh` must end with `sparkfrost: all good` (~15s). It runs the smoke test, `tests/rules_test.gd` (mechanics, map validation, solver proves each level and that `par` equals the true minimum) and `checks/autoplay.sh` (the real game beats every level at par).
-- Dev flags after `--`: `--level=N` (0-based), `--autoplay` (the solver plays), `--exit-on-end` (prints `RESULT …`), `--screenshot=path.png --wait=S`.
+- Every change: `bash checks/verify.sh` must end with `sparkfrost: all good` (~60s). It runs the smoke test, `tests/rules_test.gd` (mechanics, map validation, solver proves each level and that `par` equals the true minimum), `tests/input_test.gd` (hold-to-walk, buffered presses, per-sister keys, smart power, undo) and `checks/autoplay.sh` (the real game beats every level at par).
+- Dev flags after `--`: `--level=N` (0-based), `--autoplay` (the solver plays), `--exit-on-end` (prints `RESULT …`, `--linger=S`), `--no-music`, `--screenshot=path.png --wait=S`.
+- Sound: `python3 tools/make_audio.py` regenerates `audio/` (stdlib synth in `tools/synth.py`, shared with Cardboard). Keep repeated sounds (steps) very quiet.
+- New levels: write the map, run verify, and set `par` to the minimum the test reports. Corridors one tile wide often deadlock the two sisters, so leave room to pass.
 - Visual check: `godot --path . -- --level=N --screenshot=<scratchpad>/x.png`, then Read the PNG.
 
 ## Layout
 - `scripts/rules.gd`: all puzzle rules, with no graphics. It has terrain + blocks layers, `move` (with ice sliding and block pushing), `power`, `won`, `key`/`copy` for the solver, and int-encoded actions. The map format is at the top.
 - `scripts/solver.gd`: BFS over board states. It gives the shortest solution, proves levels beatable, and sets par.
 - `scripts/levels.gd`: levels as ASCII maps with name, hint and par. When you change a map, run verify; the test reports the new minimum to use as par.
-- `scripts/game.gd`: input, animation, particles, HUD, undo, stars and saves (`user://sparkfrost.cfg`). It draws from board state every frame and refits to any window shape (the stretch aspect is "expand"), so portrait works too.
-- `scripts/art.gd`: all art drawn in code (sky, tiles, sisters). Pastel aurora palette.
+- `scripts/game.gd`: input, animation, particles, HUD, undo, stars, saves (`user://sparkfrost.cfg`), emotions and story. Frost is always WASD + Space and Spark is always Arrows + Enter (no switching). Input is polled each frame: hold to keep walking, presses mid-step are buffered, and smart power aims at the one valid neighbour. Changed tiles animate via `_tile_fx`. Moods (happy, joy, proud, surprised, worried, sad) and emotes (heart, !, ?, sparkle, sweat) react to events; Spark is worried next to water. Each level's intro/outro story lines come from levels.gd. It draws from board state every frame and refits to any window shape (the stretch aspect is "expand").
+- `scripts/sound.gd`: an SFX pool plus the looping waltz on Music/SFX buses; M toggles music.
+- `scripts/art.gd`: all art drawn in code (sky, snow-capped walls, tiles, sisters with moods, emote bubbles). Pastel aurora palette.
 
 ## Conventions
 - Rules stay deterministic and graphics-free, so the solver and the game always agree.

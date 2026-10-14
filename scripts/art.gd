@@ -56,7 +56,11 @@ static func tile(ci: CanvasItem, r: Rect2, kind: int, cell: Vector2i, t: float) 
 		Rules.WALL:
 			ci.draw_rect(r, WALL)
 			ci.draw_rect(Rect2(r.position, Vector2(s, s * 0.72)), WALL_TOP)
-			ci.draw_line(r.position + Vector2(s * 0.15, s * 0.2), r.position + Vector2(s * 0.45, s * 0.2), Color(1, 1, 1, 0.35), s * 0.06)
+			# A fluffy snow cap with little drips, so walls look like snowy hedges.
+			ci.draw_rect(Rect2(r.position, Vector2(s, s * 0.22)), SNOW)
+			for k in 3:
+				ci.draw_circle(r.position + Vector2(s * (0.2 + 0.3 * k), s * 0.22), s * (0.09 if (cell.x + k) % 2 == 0 else 0.06), SNOW)
+			ci.draw_line(r.position + Vector2(s * 0.15, s * 0.45), r.position + Vector2(s * 0.4, s * 0.45), Color(1, 1, 1, 0.3), s * 0.05)
 		Rules.WATER:
 			ci.draw_rect(r, WATER)
 			for k in 2:
@@ -158,11 +162,14 @@ static func sun(ci: CanvasItem, c: Vector2, r: float, col: Color, t: float) -> v
 
 
 ## A sister, drawn standing at `c` (tile centre), roughly one tile tall.
-static func sister(ci: CanvasItem, c: Vector2, tile_size: float, which: int, facing: Vector2i, t: float, active: bool) -> void:
+## `mood` is one of: happy, joy, proud, surprised, worried, sad.
+## `squash` > 0 squashes her down (landing), < 0 stretches her up (hopping).
+static func sister(ci: CanvasItem, c: Vector2, tile_size: float, which: int, facing: Vector2i, t: float,
+		active: bool, mood := "happy", squash := 0.0) -> void:
 	var s := tile_size * 1.25   # a little bigger than a tile, so the sisters read clearly
 	c += Vector2(0, -tile_size * 0.08)
 	var bob := sin(t * 4.0) * s * 0.025 if active else 0.0
-	var base := c + Vector2(0, s * 0.08 + bob)
+	var base0 := Vector2(0, s * 0.08 + bob)
 	# A flat oval shadow (a circle squashed by the draw transform), and a
 	# glowing ring under whichever sister you're controlling.
 	var feet := c + Vector2(0, s * 0.38)
@@ -171,9 +178,13 @@ static func sister(ci: CanvasItem, c: Vector2, tile_size: float, which: int, fac
 	if active:
 		ci.draw_arc(Vector2.ZERO, s * 0.34, 0, TAU, 32, Color(1, 1, 1, 0.6 + 0.3 * sin(t * 5.0)), s * 0.08)
 	ci.draw_set_transform(Vector2.ZERO)
+	# Squash and stretch: scale the whole body around her feet.
+	ci.draw_set_transform(feet, 0.0, Vector2(1.0 + squash * 0.5, 1.0 - squash))
+	c -= feet
 	var frost := which == Rules.FROST
 	var dress := Color("9db4ff") if frost else Color("ff8a7a")
 	var trim := Color.WHITE if frost else Color("ffd27a")
+	var base := (c - Vector2.ZERO) + base0
 	# Dress: a soft bell shape.
 	ci.draw_colored_polygon(PackedVector2Array([base + Vector2(-s * 0.13, -s * 0.06), base + Vector2(s * 0.13, -s * 0.06),
 			base + Vector2(s * 0.3, s * 0.3), base + Vector2(-s * 0.3, s * 0.3)]), dress)
@@ -191,12 +202,10 @@ static func sister(ci: CanvasItem, c: Vector2, tile_size: float, which: int, fac
 		for k in 5:   # big golden curls
 			ci.draw_circle(head + Vector2.from_angle(PI + k * PI / 4.0) * hr * 0.95, hr * 0.42, Color("ffb347"))
 	ci.draw_circle(head, hr, Color("ffe3d3"))
-	# Face: eyes glance the way she's facing.
+	# Face: the eyes glance the way she's facing; the expression shows her mood.
 	var look := Vector2(facing) * s * 0.025
-	for side in [-1.0, 1.0]:
-		ci.draw_circle(head + Vector2(side * hr * 0.4, hr * 0.05) + look, s * 0.028, INK)
-		ci.draw_circle(head + Vector2(side * hr * 0.62, hr * 0.38), s * 0.03, Color(1.0, 0.55, 0.6, 0.45))
-	ci.draw_arc(head + Vector2(0, hr * 0.32) + look * 0.5, hr * 0.22, 0.3, PI - 0.3, 8, INK, s * 0.02)
+	var blink := fmod(t * 0.9 + which * 1.7, 3.6) < 0.13
+	_face(ci, head, hr, s, look, mood, blink)
 	if frost:
 		# Knit beanie with a pom-pom and a snowflake.
 		ci.draw_colored_polygon(PackedVector2Array([head + Vector2(-hr * 1.05, -hr * 0.25), head + Vector2(hr * 1.05, -hr * 0.25),
@@ -210,3 +219,78 @@ static func sister(ci: CanvasItem, c: Vector2, tile_size: float, which: int, fac
 		ci.draw_colored_polygon(PackedVector2Array([clip + Vector2(-hr * 0.22, hr * 0.15), clip + Vector2(hr * 0.22, hr * 0.15),
 				clip + Vector2(0, -hr * 0.45)]), Color("ff6a3d"))
 		ci.draw_circle(clip + Vector2(0, hr * 0.05), hr * 0.16, Color("ffd27a"))
+	ci.draw_set_transform(Vector2.ZERO)
+
+
+static func _face(ci: CanvasItem, head: Vector2, hr: float, s: float, look: Vector2, mood: String, blink: bool) -> void:
+	var blush := 0.7 if mood == "joy" else 0.45
+	for side in [-1.0, 1.0]:
+		ci.draw_circle(head + Vector2(side * hr * 0.62, hr * 0.38), s * 0.032, Color(1.0, 0.55, 0.6, blush))
+	var lw := s * 0.022
+	for side in [-1.0, 1.0]:
+		var e := head + Vector2(side * hr * 0.4, hr * 0.05) + look
+		match mood:
+			"joy", "proud":
+				ci.draw_arc(e + Vector2(0, s * 0.012), s * 0.03, PI + 0.3, TAU - 0.3, 8, INK, lw)   # happy closed eyes ^ ^
+			"surprised":
+				ci.draw_circle(e, s * 0.045, Color.WHITE)
+				ci.draw_arc(e, s * 0.045, 0, TAU, 12, INK, lw * 0.6)
+				ci.draw_circle(e + look * 0.5, s * 0.022, INK)
+			_:
+				if blink:
+					ci.draw_line(e - Vector2(s * 0.026, 0), e + Vector2(s * 0.026, 0), INK, lw)
+				else:
+					ci.draw_circle(e, s * 0.03, INK)
+					ci.draw_circle(e + Vector2(-s * 0.01, -s * 0.012), s * 0.009, Color.WHITE)   # eye shine
+		if mood == "worried" or mood == "sad":
+			# Eyebrows: worried tilts up toward the middle, sad droops at the ends.
+			var inner := e + Vector2(-side * s * 0.03, -s * (0.055 if mood == "worried" else 0.045))
+			var outer := e + Vector2(side * s * 0.03, -s * (0.04 if mood == "worried" else 0.03))
+			ci.draw_line(inner, outer, INK, lw * 0.8)
+	var m := head + Vector2(0, hr * 0.36) + look * 0.5
+	match mood:
+		"joy":
+			ci.draw_colored_polygon(PackedVector2Array([m + Vector2(-s * 0.05, -s * 0.01), m + Vector2(s * 0.05, -s * 0.01),
+					m + Vector2(s * 0.03, s * 0.04), m + Vector2(0, s * 0.05), m + Vector2(-s * 0.03, s * 0.04)]), INK)
+			ci.draw_circle(m + Vector2(0, s * 0.03), s * 0.016, Color("ff8fa3"))
+		"proud":
+			ci.draw_arc(m + Vector2(s * 0.01, -s * 0.01), hr * 0.25, 0.2, PI - 0.6, 8, INK, lw)
+		"surprised":
+			ci.draw_circle(m + Vector2(0, s * 0.01), s * 0.022, INK)
+		"worried":
+			ci.draw_polyline(PackedVector2Array([m + Vector2(-s * 0.035, s * 0.01), m + Vector2(-s * 0.012, -s * 0.004),
+					m + Vector2(s * 0.012, s * 0.01), m + Vector2(s * 0.035, -s * 0.004)]), INK, lw * 0.8)
+		"sad":
+			ci.draw_arc(m + Vector2(0, s * 0.03), hr * 0.2, PI + 0.5, TAU - 0.5, 8, INK, lw)
+		_:
+			ci.draw_arc(m - Vector2(0, s * 0.01), hr * 0.22, 0.3, PI - 0.3, 8, INK, lw)
+
+
+## A little speech-bubble emote above a sister: heart, !, ?, sparkle or sweat.
+static func emote(ci: CanvasItem, at: Vector2, s: float, kind: String, t: float, alpha: float) -> void:
+	var pop := 1.0 + 0.12 * sin(t * 8.0)
+	var r := s * 0.2 * pop
+	if kind == "sweat":
+		var d := at + Vector2(s * 0.28, s * 0.1)
+		ci.draw_circle(d, s * 0.06, Color(0.55, 0.85, 1.0, alpha))
+		ci.draw_colored_polygon(PackedVector2Array([d + Vector2(-s * 0.055, -s * 0.02), d + Vector2(s * 0.055, -s * 0.02), d + Vector2(0, -s * 0.13)]),
+				Color(0.55, 0.85, 1.0, alpha))
+		return
+	ci.draw_circle(at, r, Color(1, 1, 1, 0.95 * alpha))
+	ci.draw_colored_polygon(PackedVector2Array([at + Vector2(-r * 0.3, r * 0.8), at + Vector2(r * 0.3, r * 0.8), at + Vector2(-r * 0.1, r * 1.35)]),
+			Color(1, 1, 1, 0.95 * alpha))
+	match kind:
+		"heart":
+			var hc := Color(1.0, 0.4, 0.55, alpha)
+			ci.draw_circle(at + Vector2(-r * 0.25, -r * 0.1), r * 0.3, hc)
+			ci.draw_circle(at + Vector2(r * 0.25, -r * 0.1), r * 0.3, hc)
+			ci.draw_colored_polygon(PackedVector2Array([at + Vector2(-r * 0.53, 0), at + Vector2(r * 0.53, 0), at + Vector2(0, r * 0.55)]), hc)
+		"!":
+			ci.draw_line(at + Vector2(0, -r * 0.55), at + Vector2(0, r * 0.15), Color(1.0, 0.35, 0.35, alpha), r * 0.28)
+			ci.draw_circle(at + Vector2(0, r * 0.45), r * 0.15, Color(1.0, 0.35, 0.35, alpha))
+		"?":
+			ci.draw_arc(at + Vector2(0, -r * 0.22), r * 0.3, PI, TAU + PI * 0.5, 10, Color(0.45, 0.4, 0.9, alpha), r * 0.2)
+			ci.draw_line(at + Vector2(0, r * 0.08), at + Vector2(0, r * 0.25), Color(0.45, 0.4, 0.9, alpha), r * 0.2)
+			ci.draw_circle(at + Vector2(0, r * 0.5), r * 0.12, Color(0.45, 0.4, 0.9, alpha))
+		_:
+			snowflake(ci, at, r * 0.6, Color(0.55, 0.75, 1.0, alpha), t)

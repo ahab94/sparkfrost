@@ -12,5 +12,6 @@ check() {  # script, success marker
 }
 check res://tests/smoke_test.gd "SMOKE OK"
 check res://tests/rules_test.gd "RULES OK"
+check res://tests/input_test.gd "INPUT OK"
 bash checks/autoplay.sh | tail -1
 echo "sparkfrost: all good"

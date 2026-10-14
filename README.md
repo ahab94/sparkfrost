@@ -5,16 +5,14 @@ Two princess sisters, one of ice and one of fire, solve snowy puzzles together.
 **Frost** freezes water into ice bridges. **Spark** melts ice and lights the lanterns that open the gates. The ice is slippery! Get both sisters home.
 
 ## Controls
-| Key | Action |
-|---|---|
-| Arrows / WASD | Move |
-| Space / E | Use power (in the direction you're facing) |
-| Tab / Q | Switch sister |
-| Z | Undo |
-| R | Restart |
-| Enter | Next level |
+| | Frost ❄️ | Spark 🔥 |
+|---|---|---|
+| Move (hold to keep walking) | WASD | Arrow keys |
+| Use power | Space | Enter |
 
-Beat a level in par moves for ⭐⭐⭐.
+Z undo · R restart · M music · [ ] change level. Play alone with both hands, or with a friend.
+
+Beat each of the 15 levels in par moves for ⭐⭐⭐.
 
 ## Development
 Made with [Godot 4.7](https://godotengine.org). Everything is drawn in code.
