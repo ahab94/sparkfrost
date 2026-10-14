@@ -47,6 +47,28 @@ func _run() -> void:
 	game.undo()
 	await _frames(2)
 	_expect(game.board.pos[1] == Vector2i(2, 2) and game.moves == 1, "undo steps back one move")
+
+	# On-screen controls: hold Frost's right arrow with a finger.
+	game.load_level(0)
+	game.touch_ui = true
+	await _frames(2)
+	var right: Dictionary = {}
+	for b in game._buttons:
+		if b.action == "f_right":
+			right = b
+	_expect(not right.is_empty(), "touch mode shows Frost's pad")
+	if not right.is_empty():
+		var touch := InputEventScreenTouch.new()
+		touch.index = 0
+		touch.position = (right.rect as Rect2).get_center()
+		touch.pressed = true
+		game._unhandled_input(touch)
+		await _frames(40)
+		touch.pressed = false
+		game._unhandled_input(touch)
+		await _frames(20)
+		_expect(game.board.pos[0].x >= 2 and game.board.pos[0].y == 1, "holding the on-screen arrow walks Frost (at %s)" % game.board.pos[0])
+		_expect(not Input.is_action_pressed("f_right"), "lifting the finger releases the arrow")
 	print("INPUT OK" if failures == 0 else "INPUT FAILED (%d)" % failures)
 	quit(0 if failures == 0 else 1)
 

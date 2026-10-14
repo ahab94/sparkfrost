@@ -56,10 +56,23 @@ var _autoplay: Array = []
 var _auto_timer := 0.0
 var _first_move_t := -1.0
 
+# On-screen controls for phones and tablets. They turn on automatically on a
+# touch screen (or with the --touch dev flag). Each button presses the same
+# input action a key would, so touch gets hold-to-walk and buffering for free.
+var touch_ui := false
+var _buttons: Array = []      # [{rect, action, kind, si, dir}], rebuilt by _layout()
+var _touch_owner := {}        # finger index -> action it's holding down
+var _hint_y := 0.0            # where the story/hint box sits
+
 
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
 	_setup_input()
+	touch_ui = DisplayServer.is_touchscreen_available() or _dev_flag("touch")
+	# Pick a layout size for the window's shape: wide (1152x648) or tall (648x1152).
+	# "expand" stretching then grows it to fill the screen exactly.
+	get_viewport().size_changed.connect(_fit_to_window)
+	_fit_to_window()
 	sound = Sound.new()
 	add_child(sound)
 	if _dev_flag("autoplay"):
@@ -77,6 +90,16 @@ func _ready() -> void:
 	var shot := _dev_arg("screenshot", "")
 	if shot != "":
 		_save_screenshot_and_quit(shot)
+
+
+func _fit_to_window() -> void:
+	var win := DisplayServer.window_get_size()
+	if Engine.get_write_movie_path() != "" or win.x <= 0:
+		return
+	var tall := win.y > win.x
+	var want := Vector2i(648, 1152) if tall else Vector2i(1152, 648)
+	if get_window().content_scale_size != want:
+		get_window().content_scale_size = want
 
 
 func load_level(index: int) -> void:
@@ -119,6 +142,9 @@ func _busy(si: int) -> bool:
 # --- Input -------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventMouseButton:
+		if _handle_pointer(event):
+			return
 	if event.is_action_pressed("restart"):
 		load_level(level_index)
 	elif event.is_action_pressed("next_level"):
@@ -131,6 +157,56 @@ func _unhandled_input(event: InputEvent) -> void:
 		load_level((level_index + 1) % Levels.LEVELS.size())
 	elif event.is_action_pressed("undo"):
 		undo()
+
+
+## Touch (and mouse) on the on-screen buttons. Direction and power buttons
+## hold their input action down while a finger is on them; sliding a finger
+## across a pad switches direction. Returns true if it used the event.
+func _handle_pointer(event: InputEvent) -> bool:
+	var index := -1
+	var pressed := false
+	var pos: Vector2 = event.position
+	if event is InputEventScreenTouch:
+		touch_ui = true
+		index = event.index
+		pressed = event.pressed
+	elif event is InputEventScreenDrag:
+		index = event.index
+		pressed = true
+	elif event is InputEventMouseButton:
+		if event.button_index != MOUSE_BUTTON_LEFT or not touch_ui:
+			return false
+		pressed = event.pressed
+	if not pressed:
+		if _touch_owner.has(index):
+			Input.action_release(_touch_owner[index])
+			_touch_owner.erase(index)
+		return true
+	if won and not event is InputEventScreenDrag:
+		load_level((level_index + 1) % Levels.LEVELS.size())
+		return true
+	var hit: Dictionary = {}
+	for b in _buttons:
+		if (b.rect as Rect2).grow(6).has_point(pos):
+			hit = b
+			break
+	var held: String = _touch_owner.get(index, "")
+	if hit.is_empty() or hit.action == held:
+		return not hit.is_empty()
+	if held != "":
+		Input.action_release(held)
+		_touch_owner.erase(index)
+	if event is InputEventScreenDrag and hit.kind != "dir":
+		return true   # sliding onto a power or menu button doesn't press it
+	match hit.kind:
+		"dir", "power":
+			Input.action_press(hit.action)
+			_touch_owner[index] = hit.action
+		"undo":
+			undo()
+		"restart":
+			load_level(level_index)
+	return true
 
 
 ## Polled every frame so holding a key keeps walking. Presses that arrive
@@ -404,10 +480,54 @@ func _layout() -> void:
 	var portrait := view.y > view.x
 	var top := 96.0 if portrait else 74.0
 	var bottom := 150.0 if portrait else 110.0
-	var avail := Vector2(view.x - 40.0, view.y - top - bottom)
-	_tile = floorf(clampf(minf(avail.x / board.w, avail.y / board.h), 24.0, 110.0))
+	var side := 20.0
+	_buttons.clear()
+	_hint_y = view.y - (130.0 if portrait else 96.0)
+	if touch_ui:
+		if portrait:
+			# Two pads along the bottom: Frost on the left, Spark on the right.
+			var pad_h := clampf(view.y * 0.3, 230.0, 380.0)
+			var b := minf(pad_h / 3.3, view.x / 7.6)
+			var cy := view.y - pad_h * 0.5 - 8.0
+			_add_pad(Rules.FROST, Vector2(view.x * 0.25, cy), b)
+			_add_pad(Rules.SPARK, Vector2(view.x * 0.75, cy), b)
+			_add_menu_buttons(Vector2(view.x * 0.5, cy), b, true)
+			bottom = pad_h + 96.0
+			_hint_y = view.y - pad_h - 86.0
+		else:
+			# Pads on the left and right edges, the board in between.
+			var b := minf(view.y / 6.8, 86.0)
+			var cy := view.y * 0.58
+			_add_pad(Rules.FROST, Vector2(b * 1.75, cy), b)
+			_add_pad(Rules.SPARK, Vector2(view.x - b * 1.75, cy), b)
+			_add_menu_buttons(Vector2(view.x * 0.5, view.y - 26.0), b, false)
+			side = b * 3.6 + 16.0
+			bottom = 136.0
+			_hint_y = view.y - 122.0
+	var avail := Vector2(view.x - side * 2.0, view.y - top - bottom)
+	_tile = floorf(clampf(minf(avail.x / board.w, avail.y / board.h), 20.0, 110.0))
 	var size := Vector2(board.w, board.h) * _tile
 	_origin = Vector2((view.x - size.x) * 0.5, top + (avail.y - size.y) * 0.5).floor()
+
+
+## A D-pad: four direction buttons around a round power button.
+func _add_pad(si: int, c: Vector2, b: float) -> void:
+	var names := ["up", "right", "down", "left"]
+	var prefix := "f_" if si == Rules.FROST else "s_"
+	for i in 4:
+		var d := Vector2(Rules.DIRS[i])
+		_buttons.append({"rect": Rect2(c + d * b - Vector2(b, b) * 0.46, Vector2(b, b) * 0.92), "action": prefix + names[i],
+				"kind": "dir", "si": si, "dir": i})
+	_buttons.append({"rect": Rect2(c - Vector2(b, b) * 0.42, Vector2(b, b) * 0.84), "action": prefix + "power",
+			"kind": "power", "si": si, "dir": -1})
+
+
+func _add_menu_buttons(c: Vector2, b: float, stacked: bool) -> void:
+	var size := Vector2(minf(b * 0.95, 76.0), 38.0)
+	var offsets := [Vector2(0, -26), Vector2(0, 26)] if stacked else [Vector2(-size.x * 0.6, 0), Vector2(size.x * 0.6, 0)]
+	var kinds := ["undo", "restart"]
+	for k in 2:
+		_buttons.append({"rect": Rect2(c + offsets[k] - size * 0.5, size), "action": kinds[k], "kind": kinds[k], "si": -1, "dir": -1})
 
 
 func _cell_rect(c: Vector2i) -> Rect2:
@@ -483,9 +603,10 @@ func _draw_hud(view: Vector2) -> void:
 		else:
 			Art.sun(self, r.position + Vector2(20, 17), 6, Art.INK, _t)
 		_text(r.position + Vector2(36, 23), NAMES[si], 18, Art.INK)
-		_text(r.position + Vector2(w - 12, 23), KEYS[si], 13, Color(Art.INK, 0.75), HORIZONTAL_ALIGNMENT_RIGHT)
+		if not touch_ui:
+			_text(r.position + Vector2(w - 12, 23), KEYS[si], 13, Color(Art.INK, 0.75), HORIZONTAL_ALIGNMENT_RIGHT)
 	# Story line while the level begins; the hint afterwards.
-	var box := Rect2(Vector2(view.x * 0.5 - minf(view.x - 40, 760) * 0.5, view.y - (130.0 if portrait else 96.0)),
+	var box := Rect2(Vector2(view.x * 0.5 - minf(view.x - 40, 760) * 0.5, _hint_y),
 			Vector2(minf(view.x - 40, 760), 62))
 	var lines: Array = lv.get("intro", [])
 	var story_on := not won and not lines.is_empty() and (_first_move_t < 0.0 or _level_t - _first_move_t < 1.5) and _level_t < 9.0
@@ -494,10 +615,41 @@ func _draw_hud(view: Vector2) -> void:
 		_dialogue(box, lines[idx])
 	else:
 		_text(Vector2(view.x * 0.5, box.position.y + 38), lv["hint"], 18, Color("f3f0ff"), HORIZONTAL_ALIGNMENT_CENTER)
-	_text(Vector2(view.x * 0.5, view.y - 16), "Z undo  ·  R restart  ·  M music  ·  [ ] change level", 14,
-			Color(1, 1, 1, 0.5), HORIZONTAL_ALIGNMENT_CENTER)
+	if touch_ui:
+		_draw_touch_controls()
+	else:
+		_text(Vector2(view.x * 0.5, view.y - 16), "Z undo  ·  R restart  ·  M music  ·  [ ] change level", 14,
+				Color(1, 1, 1, 0.5), HORIZONTAL_ALIGNMENT_CENTER)
 	if won:
 		_draw_win(view, lv)
+
+
+func _draw_touch_controls() -> void:
+	for b in _buttons:
+		var r: Rect2 = b.rect
+		var down: bool = b.kind in ["dir", "power"] and Input.is_action_pressed(b.action)
+		match b.kind:
+			"dir":
+				var col: Color = Art.FROST_BLUE if b.si == Rules.FROST else Art.SPARK_ORANGE
+				_round_rect(r, Color(col, 0.85 if down else 0.38), int(r.size.x * 0.25))
+				var c := r.get_center()
+				var d := Vector2(Rules.DIRS[b.dir])
+				var p := Vector2(-d.y, d.x)
+				var k := r.size.x * 0.22
+				draw_colored_polygon(PackedVector2Array([c + d * k, c - d * k * 0.6 + p * k, c - d * k * 0.6 - p * k]),
+						Art.INK if down else Color(1, 1, 1, 0.9))
+			"power":
+				var col: Color = Art.FROST_BLUE if b.si == Rules.FROST else Art.SPARK_ORANGE
+				var c := r.get_center()
+				draw_circle(c, r.size.x * 0.5, Color(col, 0.95 if down else 0.7))
+				draw_arc(c, r.size.x * 0.5, 0, TAU, 32, Color.WHITE, 3.0)
+				if b.si == Rules.FROST:
+					Art.snowflake(self, c, r.size.x * 0.26, Art.INK, 0.0)
+				else:
+					Art.sun(self, c, r.size.x * 0.17, Art.INK, _t)
+			_:
+				_round_rect(r, Color(1, 1, 1, 0.22), 12)
+				_text(r.get_center() + Vector2(0, 6), "Undo" if b.kind == "undo" else "Restart", 15, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
 
 
 func _dialogue(box: Rect2, line: Array) -> void:
@@ -519,7 +671,8 @@ func _dialogue(box: Rect2, line: Array) -> void:
 ## The win screen: both sisters together, hugging, with hearts, stars and
 ## the level's closing story line.
 func _draw_win(view: Vector2, lv: Dictionary) -> void:
-	var panel := Rect2(Vector2(view.x * 0.5 - 280, view.y * 0.5 - 150), Vector2(560, 300))
+	var pw := minf(560.0, view.x - 24.0)
+	var panel := Rect2(Vector2(view.x * 0.5 - pw * 0.5, view.y * 0.5 - 150), Vector2(pw, 300))
 	_round_rect(Rect2(Vector2.ZERO, view), Color(0.1, 0.08, 0.25, 0.45), 0)
 	_round_rect(panel, Color(0.16, 0.13, 0.36, 0.95), 28)
 	_text(Vector2(view.x * 0.5, panel.position.y + 46), "Both sisters are home!", 32, Color("fff4b0"), HORIZONTAL_ALIGNMENT_CENTER)
@@ -539,7 +692,8 @@ func _draw_win(view: Vector2, lv: Dictionary) -> void:
 		var line: Array = outro[idx]
 		var who: String = "" if int(line[0]) < 0 else NAMES[int(line[0])] + ": "
 		_text(Vector2(view.x * 0.5, panel.position.y + 244), who + String(line[1]), 18, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
-	_text(Vector2(view.x * 0.5, panel.end.y - 18), "Press Enter for the next level", 15, Color(1, 1, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
+	_text(Vector2(view.x * 0.5, panel.end.y - 18), "Tap for the next level" if touch_ui else "Press Enter for the next level", 15,
+			Color(1, 1, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 
 
 func _round_rect(r: Rect2, col: Color, radius: int) -> void:
