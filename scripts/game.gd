@@ -55,6 +55,7 @@ var _origin := Vector2.ZERO
 var _autoplay: Array = []
 var _auto_timer := 0.0
 var _first_move_t := -1.0
+var _run_time := 0.0         # seconds since launch, for --log-events timestamps
 
 # On-screen controls for phones and tablets. They turn on automatically on a
 # touch screen (or with the --touch dev flag). Each button presses the same
@@ -284,6 +285,7 @@ func do_action(a: int, pressed := true) -> void:
 				pushed = true
 		if pushed:
 			sound.play("push", -3.0, 0.05)
+			_log_event("push")
 			_set_mood(si, "proud", 0.5)
 	_record_fx(before)
 	active = si
@@ -296,12 +298,14 @@ func do_action(a: int, pressed := true) -> void:
 		_set_mood(si, "joy", 1.5)
 		_set_emote(si, "heart", 1.4)
 		sound.play("home", -4.0)
+		_log_event("home_" + NAMES[si].to_lower())
 	if board.won():
 		_on_win()
 
 
 func _on_power(si: int, effect: String, cell: Vector2i) -> void:
 	_burst(cell, effect)
+	_log_event(effect)
 	_set_mood(si, "proud", 0.9)
 	match effect:
 		"freeze":
@@ -326,6 +330,7 @@ func _on_win() -> void:
 		best_stars[level_index] = s
 		_save_progress()
 	sound.play("win", -1.0)
+	_log_event("win")
 	for si in 2:
 		_set_mood(si, "joy", 999.0)
 		_set_emote(si, "heart", 999.0)
@@ -400,6 +405,7 @@ func _current_mood(si: int) -> String:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_run_time += delta
 	_level_t += delta
 	_poll_input()
 	for si in 2:
@@ -614,7 +620,10 @@ func _draw_hud(view: Vector2) -> void:
 		var idx := mini(int(_level_t / 3.0), lines.size() - 1)
 		_dialogue(box, lines[idx])
 	else:
-		_text(Vector2(view.x * 0.5, box.position.y + 38), lv["hint"], 18, Color("f3f0ff"), HORIZONTAL_ALIGNMENT_CENTER)
+		var hint_lines := _wrap(lv["hint"], 18, view.x - 40.0)
+		for k in hint_lines.size():
+			_text(Vector2(view.x * 0.5, box.position.y + 38 + (k - (hint_lines.size() - 1) * 0.5) * 24), hint_lines[k], 18,
+					Color("f3f0ff"), HORIZONTAL_ALIGNMENT_CENTER)
 	if touch_ui:
 		_draw_touch_controls()
 	else:
@@ -663,7 +672,9 @@ func _dialogue(box: Rect2, line: Array) -> void:
 		Art.sister(self, face + Vector2(0, 12), 40, speaker, Vector2i.DOWN, _t, false, "happy")
 		_text(Vector2(box.position.x + 70, box.position.y + 24), NAMES[speaker], 16, col.darkened(0.35))
 		text_x = box.position.x + 70
-		_text(Vector2(text_x, box.position.y + 48), line[1], 20, Art.INK)
+		var said := _wrap(line[1], 20, box.end.x - text_x - 16.0)
+		for k in said.size():
+			_text(Vector2(text_x, box.position.y + 48 + k * 22 - (said.size() - 1) * 11), said[k], 20, Art.INK)
 	else:
 		_text(Vector2(box.get_center().x, box.position.y + 40), line[1], 20, Color("5b4b8a"), HORIZONTAL_ALIGNMENT_CENTER)
 
@@ -694,6 +705,24 @@ func _draw_win(view: Vector2, lv: Dictionary) -> void:
 		_text(Vector2(view.x * 0.5, panel.position.y + 244), who + String(line[1]), 18, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
 	_text(Vector2(view.x * 0.5, panel.end.y - 18), "Tap for the next level" if touch_ui else "Press Enter for the next level", 15,
 			Color(1, 1, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
+
+
+## Splits text into lines that fit `max_width` at `size`, breaking between
+## words, so long hints wrap on narrow (portrait) screens instead of running
+## off the edges.
+func _wrap(s: String, size: int, max_width: float) -> Array[String]:
+	var lines: Array[String] = []
+	var line := ""
+	for word in s.split(" "):
+		var attempt := word if line == "" else line + " " + word
+		if line != "" and _font.get_string_size(attempt, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > max_width:
+			lines.append(line)
+			line = word
+		else:
+			line = attempt
+	if line != "":
+		lines.append(line)
+	return lines
 
 
 func _round_rect(r: Rect2, col: Color, radius: int) -> void:
@@ -756,6 +785,14 @@ func _setup_input() -> void:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = key
 			InputMap.action_add_event(action, ev)
+
+
+## With --log-events, prints "EVENT <seconds since launch> <name>" so the video
+## tools can find moments (freeze, light_all, push, home_frost, win, ...) in a
+## recording of the same deterministic autoplay run.
+func _log_event(what: String) -> void:
+	if _dev_flag("log-events"):
+		print("EVENT %.2f %s" % [_run_time, what])
 
 
 # Dev flags go after `--`: --level=N (0-based), --autoplay (solver plays),
